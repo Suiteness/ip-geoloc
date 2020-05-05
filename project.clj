@@ -7,9 +7,6 @@
 
   :scm {:name "git" :url "https://github.com/BrunoBonacci/ip-geoloc"}
 
-  :dependencies [[org.clojure/clojure "1.8.0"]
-                 [com.maxmind.geoip2/geoip2 "2.13.1"]
-                 [clj-http "3.10.0"]
-                 [pandect "0.6.1"]
-                 [com.brunobonacci/safely "0.5.0"]
-                 [org.clojure/tools.logging "1.0.0"]])
+  :plugins [[lein-tools-deps "0.4.5"]]
+  :middleware [lein-tools-deps.plugin/resolve-dependencies-with-deps-edn]
+  :lein-tools-deps/config {:config-files [:install :user :project]})
