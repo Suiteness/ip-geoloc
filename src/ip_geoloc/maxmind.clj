@@ -1,16 +1,14 @@
 (ns ip-geoloc.maxmind
-  (:require [clojure.java.io :as io]
-            [safely.core :refer [safely sleep]]
-            [clojure.tools.logging :as log])
-  (:require [pandect.algo.md5 :as hash])
-  (:require [clj-http.client :as http])
+  (:require [clj-compress.core :as compress]
+            [clj-http.client :as http]
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
+            [pandect.algo.sha256 :as hash]
+            [safely.core :refer [safely sleep]])
   (:import com.maxmind.geoip2.DatabaseReader$Builder
            com.maxmind.geoip2.exception.AddressNotFoundException
            com.maxmind.geoip2.model.CityResponse
-           [com.maxmind.geoip2.record City Continent
-            Country Location Postal RepresentedCountry Subdivision Traits]))
-
-
+           [com.maxmind.geoip2.record City Continent Country Location Postal RepresentedCountry Subdivision Traits]))
 
 (def ^:const DEFAULTS
   {;; location of the "GeoLite2-City.mmdb" database
@@ -39,11 +37,7 @@
    ;; randomised.
    :auto-update-check-time (* 3 60 60 1000) ;; 3 hours
 
-   ;; The MaxMind url for the database
-   :database-url "https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.mmdb.gz"
-
-   ;; The url of the MD5 signature to verify the database integrity
-   :database-md5-url "https://geolite.maxmind.com/download/geoip/database/GeoLite2-City.md5"})
+   :maxmind-license-key nil})
 
 
 
@@ -241,34 +235,62 @@
 
 
 
-(defn check-db [md5 afile]
+(defn check-db [fingerprint afile]
   (when afile
-    (= md5
+    (= fingerprint
        (safely
-        (hash/md5-file afile)
+        (hash/sha256-file afile)
         :on-error
         :default nil))))
 
 
 
-(defn fetch-db-md5 [url]
-  (:body (http/get url {:as :text})))
+(defn database-fingerprint-url
+  [maxmind-license-key]
+  (format "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz.sha256"
+          maxmind-license-key))
 
 
 
-(defn update-db [{:keys [database-url database-md5-url database-folder]}]
-  (let [dbgz (io/file database-folder "GeoLite2-City.mmdb.gz")
-        db   (io/file database-folder
-                      (str "GeoLite2-City.mmdb." (System/currentTimeMillis)))]
-    (download-db database-url dbgz)
-    (gunzip-file dbgz db)
-    (if (check-db (fetch-db-md5 database-md5-url) db)
-      (do
-        (let [newdb (io/file (str (.getAbsolutePath db) ".ok"))]
-          (.renameTo db newdb)
-          (safely (.delete dbgz) :on-error :default nil)
-          newdb))
-      (safely (.delete db) :on-error :default nil))))
+(defn database-url
+  [maxmind-license-key]
+  (format "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz"
+          maxmind-license-key))
+
+
+
+(defn fetch-db-fingerprint
+  [maxmind-license-key]
+  (->> (http/get (database-fingerprint-url maxmind-license-key) {:as :text})
+       :body
+       (re-find #"^\w+")))
+
+
+
+(defn mmdb-file-path
+  [tarball]
+  (let [item-list (:item/list (compress/list-archive tarball))]
+    (-> #(re-find #"GeoLite2-City.mmdb$" (:item/name %))
+        (filter item-list)
+        first
+        :item/name)))
+
+
+
+(defn update-db [{:keys [maxmind-license-key database-folder]}]
+  (let [dbtargz (io/file database-folder "GeoLite2-City.tar.gz")
+        archdir (io/file database-folder "GeoLite2")]
+    (download-db (database-url maxmind-license-key) dbtargz)
+    (compress/decompress-archive dbtargz archdir)
+    (let [db (io/file archdir (mmdb-file-path dbtargz))]
+      (if (check-db (fetch-db-fingerprint (database-fingerprint-url maxmind-license-key)) dbtargz)
+        (do
+          (let [newdb (io/file (str (.getAbsolutePath db) "." (System/currentTimeMillis) ".ok"))]
+            (.renameTo db newdb)
+            (safely (.delete dbtargz) :on-error :default nil)
+            (safely (.delete archdir) :on-error :default nil)
+            newdb))
+        (safely (.delete dbtargz) :on-error :default nil)))))
 
 
 
@@ -283,10 +305,8 @@
 
 
 (defn update-db-if-needed
-  [current-db-file
-   {:keys [database-url database-md5-url
-           database-folder] :as cfg}]
-  (when-not (check-db (fetch-db-md5 database-md5-url) current-db-file)
+  [current-db-file {:keys [maxmind-license-key] :as cfg}]
+  (when-not (check-db (fetch-db-fingerprint maxmind-license-key) current-db-file)
     (update-db cfg)))
 
 

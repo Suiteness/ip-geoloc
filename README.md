@@ -38,13 +38,13 @@ then require the namespace:
 (require '[ip-geoloc.core :refer :all])
 ```
 
-You can download a *MaxMind GeoLite2 City* database from this page:
-http://dev.maxmind.com/geoip/geoip2/geolite2/ and put it in a folder
-of choice. As you'll see this can be done automatically, the library
-takes care of downloading the latest copy of the database for you, but
-if you don't want the library download the DB automatically (maybe
-because the production environment doesn't have outbound internet
-connection) you can specify a local `database-file`.
+You can sign up to [download a *MaxMind GeoLite2 City* database][db-signup].
+After signing up and downloading the database, put it in a folder of choice. As
+you'll see this can be done automatically, the library takes care of
+downloading the latest copy of the database for you, but if you don't want the
+library to download the DB automatically (maybe because the production
+environment doesn't have outbound internet connection) you can specify a local
+`database-file`.
 
 
 ```Clojure
@@ -202,11 +202,10 @@ Here the possible configuration options:
    ;; randomised.
    :auto-update-check-time (* 3 60 60 1000) ;; 3 hours
 
-   ;; The MaxMind url for the database
-   :database-url "http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.mmdb.gz"
-
-   ;; The url of the MD5 signature to verify the database integrity
-   :database-md5-url "http://geolite.maxmind.com/download/geoip/database/GeoLite2-City.md5"}
+   ;; Your MaxMind license key (details and free signup at https://dev.maxmind.com/geoip/geoip2/geolite2/#License)
+   ;; The value of the license key is used to derive the URL for downloading
+   ;; the database and the url of the file fingerprint for verifying the database download
+   :maxmind-license-key "yourlicensekey"
 ```
 
 Example of three different config:
@@ -221,6 +220,9 @@ Example of three different config:
 
 ;; Use the specified file as initial database but update it in the background
 (start-provider! {:database-file (io/resource "initial-GeoLite2-City.mmdb")})
+
+;; Automatically download and update the database:
+(start-provider! {:maxmind-license-key "yourlicensekey" :auto-update true})
 ```
 
 
@@ -229,3 +231,5 @@ Example of three different config:
 Copyright © 2015-2019 Bruno Bonacci
 
 Distributed under the Apache License v 2.0 (http://www.apache.org/licenses/LICENSE-2.0)
+
+[db-signup]: https://dev.maxmind.com/geoip/geoip2/geolite2/#License

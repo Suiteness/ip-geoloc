@@ -55,7 +55,7 @@
   (def ip2 "104.131.115.133")
   (def ip3 "23.232.137.112")
 
-  (def prvd (start-provider {}))
+  (def prvd (start-provider {:maxmind-license-key ""}))
 
   (geo-lookup prvd ip1)
   (geo-lookup prvd ip2)
